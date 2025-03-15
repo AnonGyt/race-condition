@@ -75,7 +75,14 @@ app.post('/api/apply-discount', (req, res) => {
   // In a real app, this could be a database query or external API call
   setTimeout(() => {
     // Apply discount
-    req.session.cart.currentPrice -= req.session.cart.originalPrice * 0.5;
+    // Calculate 50% of the original price
+    const discountAmount = req.session.cart.originalPrice * 0.5;
+    req.session.cart.currentPrice -= discountAmount;
+    
+    // Ensure price doesn't go below 0
+    req.session.cart.currentPrice = Math.max(req.session.cart.currentPrice, 0);
+    
+    // Record that we applied this discount code
     req.session.cart.discountsApplied.push(discountCode);
     
     res.json({
@@ -83,7 +90,7 @@ app.post('/api/apply-discount', (req, res) => {
       message: 'Discount applied successfully',
       cart: req.session.cart
     });
-  }, 1000); // 1-second delay to make race condition easier to exploit
+  }, 2000); // 2-second delay to make race condition easier to exploit
 });
 
 // Start the server
