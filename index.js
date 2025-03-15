@@ -1,7 +1,6 @@
-// Full Express.js application for race condition demo
+// Simple Express.js application for discount code demo
 const express = require('express');
 const bodyParser = require('body-parser');
-const session = require('express-session');
 const path = require('path');
 
 const app = express();
@@ -10,27 +9,17 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
-app.use(session({
-  secret: 'race-condition-demo-secret',
-  resave: false,
-  saveUninitialized: true
-}));
 
 // Static files
 app.use(express.static('public'));
 
-// Initialize session variables for new sessions
-app.use((req, res, next) => {
-  if (!req.session.cart) {
-    req.session.cart = {
-      itemName: 'Premium Product',
-      originalPrice: 100,
-      currentPrice: 100,
-      discountsApplied: []
-    };
-  }
-  next();
-});
+// Global cart for demonstration
+const globalCart = {
+  itemName: 'Premium Product',
+  originalPrice: 100,
+  currentPrice: 100,
+  discountsApplied: []
+};
 
 // Routes
 app.get('/', (req, res) => {
@@ -43,21 +32,20 @@ app.get('/checkout', (req, res) => {
 
 // API to get cart state
 app.get('/api/cart', (req, res) => {
-  res.json(req.session.cart);
+  res.json(globalCart);
 });
 
 // API to reset cart state
 app.post('/api/reset', (req, res) => {
-  req.session.cart = {
-    itemName: 'Premium Product',
-    originalPrice: 100,
-    currentPrice: 100,
-    discountsApplied: []
-  };
-  res.json({ success: true, message: 'Cart reset successfully', cart: req.session.cart });
+  globalCart.itemName = 'Premium Product';
+  globalCart.originalPrice = 100;
+  globalCart.currentPrice = 100;
+  globalCart.discountsApplied = [];
+  
+  res.json({ success: true, message: 'Cart reset successfully', cart: globalCart });
 });
 
-// VULNERABLE ENDPOINT - race condition in applying discount code
+// VULNERABLE ENDPOINT - allows discount to be applied twice
 app.post('/api/apply-discount', (req, res) => {
   const { discountCode } = req.body;
   
@@ -66,31 +54,27 @@ app.post('/api/apply-discount', (req, res) => {
     return res.status(400).json({ success: false, message: 'Invalid discount code' });
   }
   
-  // Check if code already applied (THIS CHECK IS VULNERABLE TO RACE CONDITIONS)
-  if (req.session.cart.discountsApplied.includes(discountCode)) {
-    return res.status(400).json({ success: false, message: 'Discount code already applied' });
+  // Allow code to be applied up to twice (VULNERABLE BY DESIGN)
+  const codeApplications = globalCart.discountsApplied.filter(code => code === 'HALF50').length;
+  if (codeApplications >= 2) {
+    return res.status(400).json({ success: false, message: 'Maximum discount limit reached' });
   }
   
-  // Simulate a small delay that makes the race condition more exploitable
-  // In a real app, this could be a database query or external API call
-  setTimeout(() => {
-    // Apply discount
-    // Calculate 50% of the original price
-    const discountAmount = req.session.cart.originalPrice * 0.5;
-    req.session.cart.currentPrice -= discountAmount;
-    
-    // Ensure price doesn't go below 0
-    req.session.cart.currentPrice = Math.max(req.session.cart.currentPrice, 0);
-    
-    // Record that we applied this discount code
-    req.session.cart.discountsApplied.push(discountCode);
-    
-    res.json({
-      success: true,
-      message: 'Discount applied successfully',
-      cart: req.session.cart
-    });
-  }, 2000); // 2-second delay to make race condition easier to exploit
+  // Apply discount (50% off original price each time)
+  const discountAmount = globalCart.originalPrice * 0.5;
+  globalCart.currentPrice -= discountAmount;
+  
+  // Ensure price doesn't go below 0
+  globalCart.currentPrice = Math.max(globalCart.currentPrice, 0);
+  
+  // Record that we applied this discount code
+  globalCart.discountsApplied.push(discountCode);
+  
+  res.json({
+    success: true,
+    message: 'Discount applied successfully',
+    cart: globalCart
+  });
 });
 
 // Start the server
