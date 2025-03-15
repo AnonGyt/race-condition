@@ -2,9 +2,9 @@
   "name": "race-condition-demo",
   "version": "1.0.0",
   "description": "A demonstration of race conditions in web applications",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
