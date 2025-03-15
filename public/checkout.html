@@ -103,8 +103,13 @@
                   cart.discountsApplied.filter(d => d === 'HALF50').length > 1) {
                 const alert = document.createElement('div');
                 alert.className = 'alert alert-danger mt-2';
-                alert.textContent = '⚠️ Double discount detected! Race condition exploited!';
+                alert.textContent = '⚠️ Double discount detected! Race condition exploited! Product is now FREE!';
                 discountsAppliedEl.appendChild(alert);
+                
+                // Make the current price appear more dramatic when it hits zero
+                if (cart.currentPrice <= 0) {
+                  currentPriceEl.innerHTML = '<span style="color:red; font-weight:bold; font-size:1.2em;">$0.00 (FREE!)</span>';
+                }
               }
             }
           })
