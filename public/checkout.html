@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Checkout - Race Condition Demo</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .checkout-card {
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .banner {
+      background-color: #f8d7da;
+      color: #721c24;
+      padding: 10px;
+      text-align: center;
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+    #discountSection {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="banner">
+      ⚠️ This is a vulnerable demo application to demonstrate race conditions ⚠️
+    </div>
+    
+    <div class="checkout-card">
+      <h1 class="text-center mb-4">Checkout</h1>
+      
+      <div class="card mb-4">
+        <div class="card-header">
+          Order Summary
+        </div>
+        <div class="card-body">
+          <h5 class="card-title" id="itemName">Premium Product</h5>
+          <p class="card-text">Original Price: <span id="originalPrice">$100.00</span></p>
+          <p class="card-text font-weight-bold">Current Price: <span id="currentPrice" class="fw-bold">$100.00</span></p>
+          <div id="discountsApplied"></div>
+        </div>
+      </div>
+      
+      <div id="discountSection">
+        <h4>Discount Code</h4>
+        <p class="text-muted">Use code <strong>HALF50</strong> for 50% off</p>
+        <div class="input-group mb-3">
+          <input type="text" id="discountCode" class="form-control" placeholder="Enter discount code">
+          <button class="btn btn-outline-primary" type="button" id="applyDiscount">Apply</button>
+        </div>
+        <div id="discountMessage" class="alert" style="display: none;"></div>
+      </div>
+      
+      <div class="d-grid gap-2 mt-4">
+        <button id="completeOrder" class="btn btn-success">Complete Order</button>
+        <button id="resetOrder" class="btn btn-secondary">Reset Order</button>
+        <a href="/" class="btn btn-link">Back to Products</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Get elements
+      const itemNameEl = document.getElementById('itemName');
+      const originalPriceEl = document.getElementById('originalPrice');
+      const currentPriceEl = document.getElementById('currentPrice');
+      const discountsAppliedEl = document.getElementById('discountsApplied');
+      const discountCodeEl = document.getElementById('discountCode');
+      const applyDiscountBtn = document.getElementById('applyDiscount');
+      const discountMessageEl = document.getElementById('discountMessage');
+      const completeOrderBtn = document.getElementById('completeOrder');
+      const resetOrderBtn = document.getElementById('resetOrder');
+      
+      // Load cart data
+      function loadCart() {
+        fetch('/api/cart')
+          .then(response => response.json())
+          .then(cart => {
+            itemNameEl.textContent = cart.itemName;
+            originalPriceEl.textContent = `$${cart.originalPrice.toFixed(2)}`;
+            currentPriceEl.textContent = `$${cart.currentPrice.toFixed(2)}`;
+            
+            // Display applied discounts
+            discountsAppliedEl.innerHTML = '';
+            if (cart.discountsApplied.length > 0) {
+              const discountList = document.createElement('p');
+              discountList.className = 'mt-3';
+              discountList.innerHTML = '<strong>Applied Discounts:</strong> ';
+              discountList.innerHTML += cart.discountsApplied.join(', ');
+              discountsAppliedEl.appendChild(discountList);
+              
+              // Make it clear if there's a double discount applied
+              if (cart.discountsApplied.length > 1 && 
+                  cart.discountsApplied.filter(d => d === 'HALF50').length > 1) {
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-danger mt-2';
+                alert.textContent = '⚠️ Double discount detected! Race condition exploited!';
+                discountsAppliedEl.appendChild(alert);
+              }
+            }
+          })
+          .catch(error => console.error('Error loading cart:', error));
+      }
+      
+      // Apply discount code
+      function applyDiscount() {
+        const code = discountCodeEl.value.trim();
+        
+        if (!code) {
+          showMessage('Please enter a discount code', 'warning');
+          return;
+        }
+        
+        // Disable button during request
+        applyDiscountBtn.disabled = true;
+        
+        fetch('/api/apply-discount', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ discountCode: code }),
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            showMessage('Discount applied successfully!', 'success');
+            loadCart();
+          } else {
+            showMessage(data.message, 'danger');
+          }
+        })
+        .catch(error => {
+          showMessage('Error applying discount', 'danger');
+          console.error('Error:', error);
+        })
+        .finally(() => {
+          applyDiscountBtn.disabled = false;
+        });
+      }
+      
+      // Show message
+      function showMessage(message, type) {
+        discountMessageEl.textContent = message;
+        discountMessageEl.className = `alert alert-${type}`;
+        discountMessageEl.style.display = 'block';
+        
+        // Auto hide after 5 seconds
+        setTimeout(() => {
+          discountMessageEl.style.display = 'none';
+        }, 5000);
+      }
+      
+      // Reset order
+      function resetOrder() {
+        fetch('/api/reset', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            showMessage('Order reset successfully', 'info');
+            loadCart();
+            discountCodeEl.value = '';
+          }
+        })
+        .catch(error => console.error('Error resetting order:', error));
+      }
+      
+      // Complete order
+      function completeOrder() {
+        const price = parseFloat(currentPriceEl.textContent.slice(1));
+        let message = '';
+        let type = '';
+        
+        if (price <= 0) {
+          message = '🎉 Order completed for FREE! Race condition successfully exploited!';
+          type = 'success';
+        } else {
+          message = `Order completed. Total paid: $${price.toFixed(2)}`;
+          type = 'primary';
+        }
+        
+        showMessage(message, type);
+      }
+      
+      // Event listeners
+      applyDiscountBtn.addEventListener('click', applyDiscount);
+      resetOrderBtn.addEventListener('click', resetOrder);
+      completeOrderBtn.addEventListener('click', completeOrder);
+      
+      // Initial load
+      loadCart();
+    });
+  </script>
+</body>
+</html>
